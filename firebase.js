@@ -1,4 +1,4 @@
-// firebase.js
+// firebase.js - التأكد من التهيئة الصحيحة
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-analytics.js";
 import { 
