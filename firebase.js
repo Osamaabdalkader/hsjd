@@ -43,17 +43,29 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const auth = getAuth(app);
-const database = getDatabase(app);
-const storage = getStorage(app);
+let app;
+let analytics;
+let auth;
+let database;
+let storage;
 
-// جعل حالة تسجيل الدخول تستمر خلال الجلسة
-setPersistence(auth, browserSessionPersistence)
-  .catch((error) => {
-    console.error("Error setting persistence:", error);
-  });
+try {
+  app = initializeApp(firebaseConfig);
+  analytics = getAnalytics(app);
+  auth = getAuth(app);
+  database = getDatabase(app);
+  storage = getStorage(app);
+  
+  // جعل حالة تسجيل الدخول تستمر خلال الجلسة
+  setPersistence(auth, browserSessionPersistence)
+    .catch((error) => {
+      console.error("Error setting persistence:", error);
+    });
+  
+  console.log("Firebase initialized successfully");
+} catch (error) {
+  console.error("Firebase initialization error:", error);
+}
 
 // تصدير الكائنات لاستخدامها في ملفات أخرى
 export { 
