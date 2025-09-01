@@ -1,4 +1,4 @@
-// استيراد دوال Firebase
+// add-post.js - الإصدار المصحح
 import { 
   auth, database, storage, serverTimestamp,
   ref, set, push, storageRef, uploadBytesResumable, getDownloadURL,
@@ -26,13 +26,37 @@ let selectedFile = null;
 // تحميل بيانات المستخدم عند بدء التحميل
 document.addEventListener('DOMContentLoaded', () => {
     checkAuthState();
+    setupEventListeners();
 });
+
+// إعداد مستمعي الأحداث
+function setupEventListeners() {
+    // اختيار صورة من المعرض
+    chooseImageBtn.addEventListener('click', () => {
+        postImageInput.removeAttribute('capture');
+        postImageInput.click();
+    });
+
+    // فتح الكاميرا
+    cameraBtn.addEventListener('click', () => {
+        postImageInput.setAttribute('capture', 'environment');
+        postImageInput.click();
+    });
+
+    // عرض معاينة الصورة
+    postImageInput.addEventListener('change', handleImageSelect);
+
+    // إزالة الصورة المختارة
+    removeImageBtn.addEventListener('click', removeSelectedImage);
+
+    // نشر منشور جديد
+    addPostForm.addEventListener('submit', handlePublishPost);
+}
 
 // التحقق من حالة المصادقة
 function checkAuthState() {
     onAuthStateChanged(auth, user => {
         if (!user) {
-            // توجيه إلى صفحة التسجيل إذا لم يكن المستخدم مسجلاً
             window.location.href = 'auth.html';
             return;
         }
@@ -44,29 +68,16 @@ function checkAuthState() {
                 currentUserData = snapshot.val();
                 currentUserData.uid = user.uid;
                 
-                // إظهار أيقونة الإدارة إذا كان المستخدم مشرفاً
                 if (currentUserData.isAdmin) {
                     adminIcon.style.display = 'flex';
                 }
             }
-        });
+        }, { onlyOnce: true });
     });
 }
 
-// اختيار صورة من المعرض
-chooseImageBtn.addEventListener('click', () => {
-    postImageInput.removeAttribute('capture');
-    postImageInput.click();
-});
-
-// فتح الكاميرا
-cameraBtn.addEventListener('click', () => {
-    postImageInput.setAttribute('capture', 'environment');
-    postImageInput.click();
-});
-
-// عرض معاينة الصورة
-postImageInput.addEventListener('change', function() {
+// معالجة اختيار الصورة
+function handleImageSelect() {
     if (this.files && this.files[0]) {
         selectedFile = this.files[0];
         imageName.textContent = selectedFile.name;
@@ -78,24 +89,18 @@ postImageInput.addEventListener('change', function() {
         }
         reader.readAsDataURL(selectedFile);
     }
-});
+}
 
 // إزالة الصورة المختارة
-removeImageBtn.addEventListener('click', () => {
+function removeSelectedImage() {
     postImageInput.value = '';
     selectedFile = null;
     imageName.textContent = 'لم يتم اختيار صورة';
     imagePreview.classList.add('hidden');
-});
+}
 
-
-
-
-
-// ... الكود السابق ...
-
-// تعديل دالة نشر المنشور
-addPostForm.addEventListener('submit', async (e) => {
+// معالجة نشر المنشور
+async function handlePublishPost(e) {
     e.preventDefault();
     
     const user = auth.currentUser;
@@ -105,11 +110,11 @@ addPostForm.addEventListener('submit', async (e) => {
         return;
     }
     
-    const title = document.getElementById('post-title').value;
-    const description = document.getElementById('post-description').value;
-    const price = document.getElementById('post-price').value;
-    const location = document.getElementById('post-location').value;
-    const phone = document.getElementById('post-phone').value;
+    const title = document.getElementById('post-title').value.trim();
+    const description = document.getElementById('post-description').value.trim();
+    const price = document.getElementById('post-price').value.trim();
+    const location = document.getElementById('post-location').value.trim();
+    const phone = document.getElementById('post-phone').value.trim();
     
     if (!title || !description) {
         alert('يرجى ملء العنوان والوصف');
@@ -123,23 +128,27 @@ addPostForm.addEventListener('submit', async (e) => {
         
         // رفع الصورة إذا تم اختيارها
         if (selectedFile) {
-            // إضافة تاريخ لاسم الملف لمنع التكرار
-            const timestamp = Date.now();
-            const fileName = `${timestamp}_${selectedFile.name}`;
-            imageUrl = await uploadImage(selectedFile, user.uid, fileName);
+            try {
+                imageUrl = await uploadImage(selectedFile, user.uid);
+            } catch (uploadError) {
+                console.error('Error uploading image:', uploadError);
+                // الاستمرار في حفظ المنشور حتى بدون صورة إذا فشل الرفع
+                alert('تم حفظ المنشور ولكن حدث خطأ في رفع الصورة. يرجى المحاولة مرة أخرى لاحقًا.');
+            }
         }
         
         // حفظ بيانات المنشور في قاعدة البيانات
         const postData = {
             title: title,
             description: description,
-            price: price,
-            location: location,
-            phone: phone,
+            price: price || 'غير محدد',
+            location: location || 'غير محدد',
+            phone: phone || 'غير متاح',
             imageUrl: imageUrl,
             authorId: user.uid,
             authorName: currentUserData.name || 'مستخدم',
-            createdAt: serverTimestamp()
+            createdAt: Date.now(), // استخدام التاريخ كرقم للتسهيل
+            timestamp: serverTimestamp() // وحفظ الطابع الزمني لـ Firebase
         };
         
         const postsRef = ref(database, 'posts');
@@ -155,14 +164,25 @@ addPostForm.addEventListener('submit', async (e) => {
     } finally {
         hideLoading();
     }
-});
+}
 
-// تعديل دالة رفع الصورة
-async function uploadImage(file, userId, fileName) {
+// رفع الصورة إلى التخزين
+async function uploadImage(file, userId) {
     return new Promise((resolve, reject) => {
+        // إضافة طابع زمني لاسم الملف لمنع التكرار
+        const timestamp = Date.now();
+        const fileExtension = file.name.split('.').pop();
+        const fileName = `post_${timestamp}.${fileExtension}`;
+        
         const storagePath = `posts/${userId}/${fileName}`;
         const imageRef = storageRef(storage, storagePath);
-        const uploadTask = uploadBytesResumable(imageRef, file);
+        
+        // تحديد نوع MIME للصورة
+        const metadata = {
+            contentType: file.type
+        };
+        
+        const uploadTask = uploadBytesResumable(imageRef, file, metadata);
         
         uploadTask.on('state_changed',
             (snapshot) => {
@@ -196,10 +216,12 @@ function resetForm() {
 
 // وظائف مساعدة
 function showLoading() {
-    loadingOverlay.classList.remove('hidden');
+    if (loadingOverlay) loadingOverlay.classList.remove('hidden');
 }
 
 function hideLoading() {
-    loadingOverlay.classList.add('hidden');
-    uploadProgress.style.width = '0%';
-}
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+        uploadProgress.style.width = '0%';
+    }
+  }
